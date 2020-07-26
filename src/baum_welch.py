@@ -70,24 +70,16 @@ class Baum_Welch():
 
         step_gammas = self._calculate_gammas()
 
-        ##################################################
-        #       Re-estimate initial probabilities
-        ##################################################
-
+        # Re-estimate initial probabilities
         new_pi = step_gammas[:, 0]
 
-        ##################################################
-        #         Re-estimate transition matrix
-        ##################################################
+        # Re-estimate transition matrix
 
         summed_zetas = self._calculate_zetas()
         summed_gammas = sum(step_gammas[:, :-1], dim = 1)
         new_transition_matrix = div(summed_zetas, summed_gammas.view(-1, 1))
 
-        ##################################################
-        #         Re-estimate emission matrix
-        ##################################################
-
+        # Re-estimate emission matrix
         summed_gammas = sum(step_gammas, dim = 1)
         state_indices = [np.where(self._obs_seq == searchval)[0] for searchval in set(self.obs_seq)]
         new_emission_matrix = [self._expected_output_occurrence(value, step_gammas, summed_gammas) for value in state_indices]   
