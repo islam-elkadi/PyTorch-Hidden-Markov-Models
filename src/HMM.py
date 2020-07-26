@@ -30,13 +30,13 @@ class Baum_Welch():
         self._Alpha = torch.zeros(size = self._Alpha_beta_shape, dtype = torch.float64)
         self._beta = torch.zeros(size = self._Alpha_beta_shape, dtype = torch.float64)
 
-    def expected_output_occurrence(self, index, step_gammas, summed_gammas):
+    def _expected_output_occurrence(self, index, step_gammas, summed_gammas):
         filtered_gamma = step_gammas.index_select(1, torch.LongTensor(index))
         sum_filtered_gamma = filtered_gamma.sum(dim = 1)
         new_obs_prob = torch.div(sum_filtered_gamma, summed_gammas)
         return new_obs_prob
     
-    def forward(self):  
+    def _forward(self):  
         alpha_initial = self._pi * self._emission[:, self.obs_seq[0]]
         self._Alpha[:, 0] = torch.div(alpha_initial, alpha_initial.sum())
         for i, obs in enumerate(self.obs_seq[1:]):
@@ -44,20 +44,20 @@ class Baum_Welch():
             forward_probability = torch.mul(current_probability, self._emission[:, obs])
             self._Alpha[:, i+1] = torch.div(forward_probability, forward_probability.sum())
 
-    def backward(self):  
+    def _backward(self):  
         self._beta[:, -1] = torch.from_numpy(np.array([1.0, 1.0]))
         for i, obs in enumerate(self.obs_seq[:0:-1]):
             x = torch.mul(self._emission[:, obs], self._A)
-            _beta = torch.matmul(x, self._beta[:, -(i+1)])
-            self._beta[:, -(i+2)] = torch.div(_beta, _beta.sum())
+            beta = torch.matmul(x, self._beta[:, -(i+1)])
+            self._beta[:, -(i+2)] = torch.div(beta, beta.sum())
 
-    def calculate_gammas(self):
+    def _calculate_gammas(self):
         num = torch.mul(self._Alpha, self._beta)
         denom = torch.sum(num, dim = 0)
         gamma_i = torch.div(num, denom)
         return gamma_i
 
-    def calculate_zetas(self):
+    def _calculate_zetas(self):
         zetas = []
         A_T = torch.transpose(self._A, 1, 0)
         for t, fwd in enumerate(self._Alpha[:, :-1].transpose(1, 0)):
@@ -69,9 +69,9 @@ class Baum_Welch():
         summed_zetas = torch.stack(zetas, dim = 0).sum(dim = 0)
         return summed_zetas
 
-    def re_estimate_parameters(self):
+    def _re_estimate_parameters(self):
 
-        step_gammas = self.calculate_gammas()
+        step_gammas = self._calculate_gammas()
 
         ##################################################
         #       Re-estimate initial probabilities
@@ -83,7 +83,7 @@ class Baum_Welch():
         #         Re-estimate transition matrix
         ##################################################
 
-        summed_zetas = self.calculate_zetas()
+        summed_zetas = self._calculate_zetas()
         summed_gammas = torch.sum(step_gammas[:, :-1], dim = 1)
         new_transition_matrix = torch.div(summed_zetas, summed_gammas.view(-1, 1))
 
@@ -93,7 +93,7 @@ class Baum_Welch():
 
         summed_gammas = torch.sum(step_gammas, dim = 1)
         state_indices = [np.where(self._obs_seq == searchval)[0] for searchval in set(self.obs_seq)]
-        new_emission_matrix = [self.expected_output_occurrence(value, step_gammas, summed_gammas) for value in state_indices]   
+        new_emission_matrix = [self._expected_output_occurrence(value, step_gammas, summed_gammas) for value in state_indices]   
         new_emission_matrix = torch.stack(new_emission_matrix, dim = 0).transpose(1, 0)
 
         return new_pi, new_transition_matrix, new_emission_matrix
@@ -108,13 +108,13 @@ class Baum_Welch():
         else:
             return True
 
-    def expectation_maximization(self):
+    def _expectation_maximization(self):
         # Expectation
-        self.forward()
-        self.backward()
+        self._forward()
+        self._backward()
 
         # Maximization 
-        new_pi, new_transition_matrix, new_emission_matrix = self.re_estimate_parameters()
+        new_pi, new_transition_matrix, new_emission_matrix = self._re_estimate_parameters()
 
         converged = self.check_convergence(new_pi, new_transition_matrix, new_emission_matrix)
 
@@ -127,7 +127,7 @@ class Baum_Welch():
     def baum_welch(self):
 
         for i in range(self._iterations):
-            converged = self.expectation_maximization()
+            converged = self._expectation_maximization()
             if converged:
                 print("Converged at iteration: {}".format(i))
                 break
