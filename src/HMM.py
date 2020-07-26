@@ -8,27 +8,27 @@ class Baum_Welch():
 
     def __init__(self, obs_seq, hid_seq):
 
-        self.epsilon = 0.0001
-        self.iterations = len(obs_seq)
+        self._epsilon = 0.0001
+        self._iterations = len(obs_seq)
 
-        self.obs_seq = obs_seq
-        self.hid_seq = hid_seq
+        self._obs_seq = obs_seq
+        self._hid_seq = hid_seq
 
-        self.num_obs = len(set(obs_seq))
-        self.num_hids = len(set(hid_seq))
+        self._num_obs = len(set(obs_seq))
+        self._num_hids = len(set(hid_seq))
 
-        self.pi_shape = [1, self.num_hids]
-        self.pi = torch.zeros(size = self.pi_shape, dtype = torch.float64)
+        self._pi_shape = [1, self._num_hids]
+        self._pi = torch.zeros(size = self._pi_shape, dtype = torch.float64)
 
-        self.emiss_shape = [self.num_hids, self.num_obs]
-        self.emission = torch.zeros(size = self.emiss_shape, dtype = torch.float64)
+        self._emiss_shape = [self._num_hids, self._num_obs]
+        self._emission = torch.zeros(size = self._emiss_shape, dtype = torch.float64)
 
-        self.A_shape = [self.num_hids, self.num_hids]
-        self.A = torch.zeros(size = self.trans_shape, dtype = torch.float64)
+        self._A_shape = [self._num_hids, self._num_hids]
+        self._A = torch.zeros(size = self.trans_shape, dtype = torch.float64)
 
-        self.alpha_beta_shape = [self.num_hids, len(self.obs_seq)]
-        self.alpha = torch.zeros(size = self.alpha_beta_shape, dtype = torch.float64)
-        self.beta = torch.zeros(size = self.alpha_beta_shape, dtype = torch.float64)
+        self._Alpha_beta_shape = [self._num_hids, len(self.obs_seq)]
+        self._Alpha = torch.zeros(size = self._Alpha_beta_shape, dtype = torch.float64)
+        self._beta = torch.zeros(size = self._Alpha_beta_shape, dtype = torch.float64)
 
     def expected_output_occurrence(self, index, step_gammas, summed_gammas):
         filtered_gamma = step_gammas.index_select(1, torch.LongTensor(index))
@@ -37,32 +37,32 @@ class Baum_Welch():
         return new_obs_prob
     
     def forward(self):  
-        alpha_initial = self.pi * self.emission[:, self.obs_seq[0]]
-        self.alpha[:, 0] = torch.div(alpha_initial, alpha_initial.sum())
+        alpha_initial = self._pi * self._emission[:, self.obs_seq[0]]
+        self._Alpha[:, 0] = torch.div(alpha_initial, alpha_initial.sum())
         for i, obs in enumerate(self.obs_seq[1:]):
-            current_probability = torch.matmul(self.alpha[:, i], A)
-            forward_probability = torch.mul(current_probability, self.emission[:, obs])
-            self.alpha[:, i+1] = torch.div(forward_probability, forward_probability.sum())
+            current_probability = torch.matmul(self._Alpha[:, i], A)
+            forward_probability = torch.mul(current_probability, self._emission[:, obs])
+            self._Alpha[:, i+1] = torch.div(forward_probability, forward_probability.sum())
 
     def backward(self):  
-        self.beta[:, -1] = torch.from_numpy(np.array([1.0, 1.0]))
+        self._beta[:, -1] = torch.from_numpy(np.array([1.0, 1.0]))
         for i, obs in enumerate(self.obs_seq[:0:-1]):
-            x = torch.mul(self.emission[:, obs], self.A)
-            _beta = torch.matmul(x, self.beta[:, -(i+1)])
-            self.beta[:, -(i+2)] = torch.div(_beta, _beta.sum())
+            x = torch.mul(self._emission[:, obs], self._A)
+            _beta = torch.matmul(x, self._beta[:, -(i+1)])
+            self._beta[:, -(i+2)] = torch.div(_beta, _beta.sum())
 
     def calculate_gammas(self):
-        num = torch.mul(self.alpha, self.beta)
+        num = torch.mul(self._Alpha, self._beta)
         denom = torch.sum(num, dim = 0)
         gamma_i = torch.div(num, denom)
         return gamma_i
 
     def calculate_zetas(self):
         zetas = []
-        A_T = torch.transpose(self.A, 1, 0)
-        for t, fwd in enumerate(self.alpha[:, :-1].transpose(1, 0)):
+        A_T = torch.transpose(self._A, 1, 0)
+        for t, fwd in enumerate(self._Alpha[:, :-1].transpose(1, 0)):
             x = torch.mul(fwd, A_T)
-            numerator = torch.transpose(x, 1, 0) * self.emission[:, self.obs_seq[t+1]] * self.beta[:, t+1]
+            numerator = torch.transpose(x, 1, 0) * self._emission[:, self.obs_seq[t+1]] * self._beta[:, t+1]
             denomenator = torch.sum(numerator, dim = 0).sum(dim = 0)
             zeta = torch.div(numerator, denomenator)
             zetas.append(zeta)
@@ -92,16 +92,16 @@ class Baum_Welch():
         ##################################################
 
         summed_gammas = torch.sum(step_gammas, dim = 1)
-        state_indices = [np.where(self.obs_seq == searchval)[0] for searchval in set(self.obs_seq)]
+        state_indices = [np.where(self._obs_seq == searchval)[0] for searchval in set(self.obs_seq)]
         new_emission_matrix = [self.expected_output_occurrence(value, step_gammas, summed_gammas) for value in state_indices]   
         new_emission_matrix = torch.stack(new_emission_matrix, dim = 0).transpose(1, 0)
 
         return new_pi, new_transition_matrix, new_emission_matrix
 
     def check_convergence(self, new_pi, new_transition_matrix, new_emission_matrix):
-        delta_pi = torch.max(torch.abs(self.pi - new_pi)).item() < self.epsilon
-        delta_transition_mat = torch.max(torch.abs(self.A - new_transition_matrix)).item() < self.epsilon
-        delta_emission_mat = torch.max(torch.abs(self.emission - new_emission_matrix)).item() < self.epsilon
+        delta_pi = torch.max(torch.abs(self._pi - new_pi)).item() < self._epsilon
+        delta_transition_mat = torch.max(torch.abs(self._A - new_transition_matrix)).item() < self._epsilon
+        delta_emission_mat = torch.max(torch.abs(self._emission - new_emission_matrix)).item() < self._epsilon
         converged =  [delta_pi, delta_transition_mat, delta_emission_mat]
         if not all(converged):
             return False
@@ -118,21 +118,21 @@ class Baum_Welch():
 
         converged = self.check_convergence(new_pi, new_transition_matrix, new_emission_matrix)
 
-        self.pi = new_pi
-        self.A = new_transition_matrix
-        self.emission = new_emission_matrix
+        self._pi = new_pi
+        self._A = new_transition_matrix
+        self._emission = new_emission_matrix
 
         return converged
 
     def baum_welch(self):
 
-        for i in range(self.iterations):
+        for i in range(self._iterations):
             converged = self.expectation_maximization()
             if converged:
                 print("Converged at iteration: {}".format(i))
                 break
                 
-        return self.pi, self.A, self.emission
+        return self._pi, self._A, self._emission
 
 if __name__ == "__main__":
 
