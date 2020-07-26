@@ -4,7 +4,7 @@ import numpy as np
 from itertools import chain 
 from collections import Counter
 
-class Baum_Welch():
+class BaumWelch():
 
     def __init__(self, obs_seq, hid_seq):
 
@@ -124,7 +124,7 @@ class Baum_Welch():
 
         return converged
 
-    def baum_welch(self):
+    def baum_welch_algo(self):
 
         for i in range(self._iterations):
             converged = self._expectation_maximization()
@@ -136,4 +136,4 @@ class Baum_Welch():
 
 if __name__ == "__main__":
 
-    bm = Baum_Welch()
+    bm = BaumWelch()
