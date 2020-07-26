@@ -1,4 +1,3 @@
-import utils
 import numpy as np
 
 from itertools import chain 
