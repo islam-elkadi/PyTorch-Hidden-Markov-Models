@@ -30,8 +30,9 @@ class Baum_Welch():
     def _expected_output_occurrence(self, index, step_gammas, summed_gammas):
         filtered_gamma = step_gammas.index_select(1, LongTensor(index))
         sum_filtered_gamma = filtered_gamma.sum(dim = 1)
-        new_obs_prob = div(sum_filtered_gamma, summed_gammas)
-        return new_obs_prob
+        
+        # New obervation probability
+        return div(sum_filtered_gamma, summed_gammas)
     
     def _forward(self):  
         alpha_initial = self._pi * self._emission[:, self.obs_seq[0]]
@@ -49,10 +50,7 @@ class Baum_Welch():
             self._beta[:, -(i+2)] = div(beta, beta.sum())
 
     def _calculate_gammas(self):
-        num = mul(self._Alpha, self._beta)
-        denom = sum(num, dim = 0)
-        gamma_i = div(num, denom)
-        return gamma_i
+        return div(sum(num, dim = 0), mul(self._Alpha, self._beta))
 
     def _calculate_zetas(self):
         zetas = []
@@ -63,8 +61,8 @@ class Baum_Welch():
             denomenator = sum(numerator, dim = 0).sum(dim = 0)
             zeta = div(numerator, denomenator)
             zetas.append(zeta)
-        summed_zetas = stack(zetas, dim = 0).sum(dim = 0)
-        return summed_zetas
+        # summed_zetas 
+        return stack(zetas, dim = 0).sum(dim = 0)
 
     def _re_estimate_parameters(self):
 
@@ -91,33 +89,21 @@ class Baum_Welch():
         delta_pi = max(abs(self._pi - new_pi)).item() < self._epsilon
         delta_transition_mat = max(abs(self._A - new_transition_matrix)).item() < self._epsilon
         delta_emission_mat = max(abs(self._emission - new_emission_matrix)).item() < self._epsilon
-        converged =  [delta_pi, delta_transition_mat, delta_emission_mat]
-        if not all(converged):
-            return False
-        else:
-            return True
-
-    def _expectation_maximization(self):
-        # Expectation
-        self._forward()
-        self._backward()
-
-        # Maximization 
-        new_pi, new_transition_matrix, new_emission_matrix = self._re_estimate_parameters()
-
-        converged = self.check_convergence(new_pi, new_transition_matrix, new_emission_matrix)
-
-        self._pi = new_pi
-        self._A = new_transition_matrix
-        self._emission = new_emission_matrix
-
-        return converged
+        return all([delta_pi, delta_transition_mat, delta_emission_mat])
 
     def baum_welch(self):
 
         for i in range(self._iterations):
-            converged = self._expectation_maximization()
-            if converged:
+            
+            # Expectation
+            self._forward()
+            self._backward()
+            
+            # Maximization algorithm: new_pi, new_transition_matrix, new_emission_matrix
+            self._pi, self._A, self._emission = self._re_estimate_parameters()
+
+            # Check convergence
+            if self.check_convergence(new_pi, new_transition_matrix, new_emission_matrix):
                 print("Converged at iteration: {}".format(i))
                 break
                 
